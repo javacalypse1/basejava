@@ -6,74 +6,43 @@ import java.util.Objects;
  */
 public class ArrayStorage {
 
-    Resume[] storage = new Resume[10000];
+    Resume[] storage = new Resume[4];
+
+    // number of first non-null storage elements
+    private int size;
 
     public void clear() {
-        Arrays.fill(storage, null);
+            Arrays.fill(storage,  0, size, null);
+            size = 0;
     }
 
 
     public void save(Resume resume) {
-        int indexOfFirstNullElement = 0;
-        for (int i = 0; i < storage.length; i++) {
-            if (storage[i] == null) {
-                indexOfFirstNullElement = i;
-                // indexOfFirstNullElement variable not needed,
-                // but I think this way the intention is more clear
-                storage[indexOfFirstNullElement] = resume;
-                break;
-            }
+        if (size < storage.length ) {
+            storage[size] = resume;
+            size++;
         }
     }
 
 
     public Resume get(String uuid) {
-        for (Resume resume : storage) {
-            if (resume == null) {
-                // if storage starts with null, it won't find any non-null element at any index,
-                // if we hit null at index>0, it also won't find any non-null element at any subsequent index
-                return null;
-                // uuid (and resume.uuid) shall not be null - it makes no sense
-                // so I'd better throw some run-time exception on encountering that,
-                //  but that was not in Specs...
-            } else if (Objects.equals(resume.uuid, uuid)) {
-                return resume;
+        for (int i = 0; i < size; i++) {
+            if (Objects.equals(storage[i].uuid, uuid)) {
+                return storage[i];
             }
         }
-        return null; // dummy, compiler is afraid of storage array being empty
+        return null;
     }
 
 
     public void delete(String uuid) {
-        int firstNullIndex = -1;
-        int elementToDeleteIndex = -1;
-        for (int i = 0; i < storage.length; i++) {
-            if (storage[i] == null) {
-                firstNullIndex = i;
-                break; // any elementToDeleteIndex shall be already set before, if any
-                // uuid (and resume.uuid) shall not be null - it makes no sense
-                // so I'd better throw some run-time exception on encountering that,
-                //  but that was not in Specs...
-            } else if (Objects.equals(storage[i].uuid, uuid)) {
-                elementToDeleteIndex = i;
+        for (int i = 0; i < size; i++) {
+            if (Objects.equals(storage[i].uuid, uuid)) {
+                storage[i] = storage[size-1];
+                storage[size-1] = null;
+                size--;
+                return;
             }
-        }
-
-        if (elementToDeleteIndex < 0) {
-            return; // do nothing - nothing to delete
-        }
-
-        if (firstNullIndex < 0) {
-            // no null elements present
-            System.arraycopy(storage, elementToDeleteIndex + 1, storage, elementToDeleteIndex, storage.length - elementToDeleteIndex - 1);
-            // we don't need duplicate of last element - it was already moved to the left
-            storage[storage.length - 1] = null;
-            return;
-        } else {
-            // there is at least one null, so
-            System.arraycopy(storage, elementToDeleteIndex + 1, storage, elementToDeleteIndex, firstNullIndex - elementToDeleteIndex - 1);
-            // set to null rightmost non-null element that was moved left
-            storage[firstNullIndex - 1] = null;
         }
     }
 
@@ -82,37 +51,12 @@ public class ArrayStorage {
      * @return array, contains only Resumes in storage (without null)
      */
     public Resume[] getAll() {
-        int firstNullIndex = getFirstNullIndex();
-
-        if (firstNullIndex < 0) {
-            return storage; // all elements are non-null
-        } else {
-            // there is at least one non-null element, so
-            return Arrays.copyOf(storage, firstNullIndex);
-        }
+        return Arrays.copyOf(storage, size);
     }
 
 
     public int size() {
-        int firstNullIndex = getFirstNullIndex();
-        if (firstNullIndex < 0) {
-            return storage.length; // all elements are non-null
-        } else {
-            return firstNullIndex;
-        }
-    }
-
-
-    // returns -1 if storage contains no null elements
-    private int getFirstNullIndex() {
-        int firstNullIndex = -1;
-        for (int i = 0; i < storage.length; i++) {
-            if (storage[i] == null) {
-                firstNullIndex = i;
-                break;
-            }
-        }
-        return firstNullIndex;
+        return size;
     }
 
 }
