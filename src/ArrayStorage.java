@@ -4,120 +4,122 @@ import org.apache.commons.lang3.SerializationUtils;
 import java.io.*;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.Objects;
 
 /**
  * Array based storage for Resumes
  */
 public class ArrayStorage {
 
-    // If save method must only assign elements of in-memory array
-    // (without need for any persistence between JVM runs),
-    // then saveStorageToDisk() shall be commented out.
-
-    //TODO: array initialization now probably not needed,
-    //because constructor reassigns array from loaded file
-    // with 10k array elements
     Resume[] storage = new Resume[10000];
-
-    private static final String DISK_STORAGE_FILENAME = "/storage.data";
-
-    public ArrayStorage() {
-        //load prevoiusly saved storage from disk
-        InputStream is = getClass().getResourceAsStream(DISK_STORAGE_FILENAME);
-        // all exceptions are handled internally by Apache Commons method
-        storage = SerializationUtils.deserialize(is);
-    }
-
 
     public void clear() {
         Arrays.fill(storage, null);
-        saveStorageToDisk();
     }
 
-    // TODO: currently it is possible to create Resume with null uuid,
-    // but probably it shall be impossible - change Resume class
-    public void save(Resume resume) {
-        if (resume == null){
-            String msg = "argument cannot be null";
-            throw new IllegalArgumentException(msg);
-        }
 
-        int indexOfFirstNullElement = ArrayUtils.indexOf(storage, null);
-        if (indexOfFirstNullElement < 0) {
-            // TODO: log "storage is out-of-memory",
-            // throw StorageIsFullException
-            // or return boolean from save: true = saved successfully
-            return; // cannot save - no free/null elements in storage array
-        } else {
-            storage[indexOfFirstNullElement] = resume;
-            saveStorageToDisk();
+    public void save(Resume resume) {
+        int indexOfFirstNullElement = 0;
+        for (int i = 0; i < storage.length; i++) {
+            if (storage[i] == null) {
+                indexOfFirstNullElement = i;
+                // indexOfFirstNullElement variable not needed,
+                // but I think this way the intention is more clear
+                storage[indexOfFirstNullElement] = resume;
+                break;
+            }
         }
     }
 
 
     public Resume get(String uuid) {
-        if (uuid == null){
-            String msg = "argument cannot be null";
-            throw new IllegalArgumentException(msg);
+        for (Resume resume : storage) {
+            if (resume == null) {
+                // if storage starts with null, it won't find any non-null element at any index,
+                // if we hit null at index>0, it also won't find any non-null element at any subsequent index
+                return null;
+                // uuid (and resume.uuid) shall not be null - it makes no sense
+                // so I'd better throw some run-time exception on encountering that,
+                //  but that was not in Specs...
+            } else if (Objects.equals(resume.uuid, uuid)) {
+                return resume;
+            }
         }
-
-        Resume resumeToGet = new Resume();
-        resumeToGet.uuid = uuid;
-        int indexOfResumeMatchingUUID = ArrayUtils.indexOf(storage, resumeToGet);
-        if (indexOfResumeMatchingUUID < 0) {
-            return null; // Resume with such uuid not found
-        } else {
-            return storage[indexOfResumeMatchingUUID];
-        }
+        return null; // dummy, compiler is afraid of storage array being empty
     }
+
 
     public void delete(String uuid) {
-        if (uuid == null){
-            String msg = "argument cannot be null";
-            throw new IllegalArgumentException(msg);
+        int firstNullIndex = -1;
+        int elementToDeleteIndex = -1;
+        for (int i = 0; i < storage.length; i++) {
+            if (storage[i] == null) {
+                firstNullIndex = i;
+                break; // any elementToDeleteIndex shall be already set before, if any
+                // uuid (and resume.uuid) shall not be null - it makes no sense
+                // so I'd better throw some run-time exception on encountering that,
+                //  but that was not in Specs...
+            } else if (Objects.equals(storage[i].uuid, uuid)) {
+                elementToDeleteIndex = i;
+            }
         }
-        // equals + hashCode added to Resume class
-        Resume resumeToDelete = new Resume();
-        resumeToDelete.uuid = uuid;
-        storage = ArrayUtils.removeElement(storage, resumeToDelete);
-        saveStorageToDisk();
+
+        if (elementToDeleteIndex < 0) {
+            return; // do nothing - nothing to delete
+        }
+
+        if (firstNullIndex < 0) {
+            // no null elements present
+            System.arraycopy(storage, elementToDeleteIndex + 1, storage, elementToDeleteIndex, storage.length - elementToDeleteIndex - 1);
+            // we don't need duplicate of last element - it was already moved to the left
+            storage[storage.length - 1] = null;
+            return;
+        } else {
+            // there is at least one null, so
+            System.arraycopy(storage, elementToDeleteIndex + 1, storage, elementToDeleteIndex, firstNullIndex - elementToDeleteIndex - 1);
+            // set to null rightmost non-null element that was moved left
+            storage[firstNullIndex - 1] = null;
+        }
     }
+
 
     /**
      * @return array, contains only Resumes in storage (without null)
      */
     public Resume[] getAll() {
-        int indexOfFirstNullElement = ArrayUtils.indexOf(storage, null);
-        if (indexOfFirstNullElement < 0) {
-            return storage; // no null elements in storage array
+        int firstNullIndex = getFirstNullIndex();
+
+        if (firstNullIndex < 0) {
+            return storage; // all elements are non-null
         } else {
-            return Arrays.copyOfRange(storage, 0, indexOfFirstNullElement);
+            // there is at least one non-null element, so
+            return Arrays.copyOf(storage, firstNullIndex);
         }
     }
 
 
     public int size() {
-        int indexOfFirstNullElement = ArrayUtils.indexOf(storage, null);
-        if (indexOfFirstNullElement < 0) {
-            return storage.length; // no null elements in storage array
+        int firstNullIndex = getFirstNullIndex();
+        if (firstNullIndex < 0) {
+            return storage.length; // all elements are non-null
         } else {
-            return indexOfFirstNullElement; // number of first non-null elements
+            return firstNullIndex;
         }
     }
 
-    // saves storage array to resources file
-    private void saveStorageToDisk() {
-        String fileName = getClass().getResource(DISK_STORAGE_FILENAME).getFile();
-        OutputStream os = null;
-        try {
-            os = new BufferedOutputStream(new FileOutputStream(fileName));
-            // all exceptions are handled internally by Apache Commons method
-            SerializationUtils.serialize(storage, os);
-        } catch (FileNotFoundException e) {
-            // TODO: add logging here
-            e.printStackTrace();
+
+    // returns -1 if storage contains no null elements
+    private int getFirstNullIndex() {
+        int firstNullIndex = -1;
+        for (int i = 0; i < storage.length; i++) {
+            if (storage[i] == null) {
+                firstNullIndex = i;
+                break;
+            }
         }
+        return firstNullIndex;
     }
 
 }

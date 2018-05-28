@@ -6,7 +6,7 @@ import java.io.Serializable;
 /**
  * com.urise.webapp.model.Resume class
  */
-public class Resume implements Serializable {
+public class Resume {
 
     // Unique identifier
     String uuid;
